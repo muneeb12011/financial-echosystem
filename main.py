@@ -222,20 +222,16 @@ def main():
                         time.sleep(1)  # Sleep for 1 second to simulate processing time
 
                     # Execute the payment after processing
-                    amount_to_process = handle_recursive_compounding(amount * 100)  # Pass amount in cents
-                    logging.info(f"Processed payment of ${amount_to_process:.2f}.")
-                    escrow_manager.update_payment_status(payment['id'], 'processed')
+                    amount_to_process = handle_recursive_compounding(amount)
+                    logging.info(f"Amount left for compounding: ${amount_to_process:.2f}")
 
-            # Sleep before the next round of processing
-            logging.info("Finished processing payments. Sleeping before next check...")
-            time.sleep(30)  # Check for new payments every 30 seconds
-
+            logging.info("Finished processing payments. Sleeping for a while before the next check.")
+            time.sleep(30)  # Wait before checking for payments again
     except Exception as e:
         logging.error(f"An error occurred: {e}")
     finally:
         db_conn.close()
-        logging.info("Exiting application.")
+        logging.info("Database connection closed.")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-    

@@ -24,8 +24,6 @@ class TransactionManager:
     async def check_for_payments(self):
         """Check for new payments in the PayPal account."""
         logging.info("Checking for new payments...")
-        # Here we would typically use a webhook or a similar mechanism to detect payments
-        # This is a placeholder to simulate payment detection
         pending_payments = await self.get_pending_payments()
         for payment in pending_payments:
             amount = Decimal(payment['amount'])
@@ -33,13 +31,12 @@ class TransactionManager:
 
     async def get_pending_payments(self):
         """Simulate fetching pending payments from PayPal."""
-        # This function should ideally communicate with PayPal's API to check for pending payments
         return [{'amount': '200.00'}]  # Example payment
 
     async def handle_transactions(self, amount):
         """Handle transactions from PayPal to Novo Bank account."""
         logging.info("Handling transactions from PayPal to Novo Bank.")
-        transaction = {'account_id': 'paypal', 'amount': amount}  # Amount sent from PayPal
+        transaction = {'account_id': 'paypal', 'amount': amount}
 
         await self.process_payment(transaction['account_id'], transaction['amount'])
 
@@ -166,7 +163,7 @@ class TransactionManager:
                         "currency": "USD"
                     },
                     "payee": {
-                        "email": self.novo_account_number  # Replace with actual email associated with Novo account
+                        "email": self.novo_account_number  # Ensure this is the correct email associated with the Novo account
                     },
                     "description": f"Payment of {amount} to Novo account."
                 }],
@@ -220,4 +217,3 @@ class TransactionManager:
         from base64 import b64encode
         credentials = f"{self.paypal_client_id}:{self.paypal_secret_key}"
         return b64encode(credentials.encode('utf-8')).decode('utf-8')
-

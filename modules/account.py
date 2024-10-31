@@ -66,7 +66,8 @@ class AccountManager:
 
         self.accounts[account_id] = new_balance
         transaction_type = 'Deposit' if amount > 0 else 'Withdrawal'
-        self.transaction_history[account_id].append(f"{transaction_type}: {amount}, New Balance: {new_balance}")
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        self.transaction_history[account_id].append(f"{timestamp} - {transaction_type}: {amount}, New Balance: {new_balance}")
         logging.info(f"Updated {account_id} balance: {new_balance}")
 
     async def get_transaction_history(self, account_id: str) -> List[str]:
