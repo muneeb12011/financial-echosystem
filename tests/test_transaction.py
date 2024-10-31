@@ -1,58 +1,50 @@
+import os
 import unittest
-from unittest.mock import patch
 from modules.transaction import TransactionManager
 from modules.account import AccountManager
+import requests
 
-class TestTransactionManager(unittest.TestCase):
+class TestTransactionManagerIntegration(unittest.TestCase):
 
     def setUp(self):
+        # Use PayPal sandbox credentials for testing
         self.api_keys = {
-            'venmo': "venmo_access_token_here",
-            'cashapp': "cashapp_secret_key_here",
-            'paypal': "paypal_secret_here"
+            'paypal_client_id': os.getenv("PAYPAL_SANDBOX_CLIENT_ID"),  # Use environment variable
+            'paypal_secret': os.getenv("PAYPAL_SANDBOX_SECRET"),  # Use environment variable
+            'paypal_email': "your_sandbox_email@example.com",  # Your PayPal sandbox email
+            'novo_account_number': "102395044",  # Novo account number
+            'novo_routing_number': "211370150"  # Novo bank routing number
         }
         self.account_manager = AccountManager(self.api_keys)
         self.transaction_manager = TransactionManager(self.account_manager)
         self.account_manager.initialize_accounts()
 
     def test_process_payment_success(self):
-        initial_balance = self.account_manager.get_account_balance('venmo')
-        self.transaction_manager.process_payment('venmo', 100)  # Simulate a payment of $100
-        self.assertEqual(self.account_manager.get_account_balance('venmo'), initial_balance + 100)
+        """Test processing a payment successfully."""
+        initial_balance = self.account_manager.get_account_balance('paypal')
+        self.transaction_manager.process_payment('paypal', 10)  # Simulate a payment of $10
+        self.assertEqual(self.account_manager.get_account_balance('paypal'), initial_balance + 10)
 
     def test_process_payment_invalid_account(self):
+        """Test processing payment for an invalid account."""
         with self.assertRaises(ValueError):
             self.transaction_manager.process_payment('invalid_account', 100)
 
-    @patch('modules.transaction.requests.post')
-    def test_process_payment_venmo(self, mock_post):
-        # Mock the response from the Venmo API
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {'status': 'success'}
+    def test_process_payment_paypal_real(self):
+        """Test processing payment through PayPal with real integration."""
+        response = self.transaction_manager.process_payment('paypal', 10)  # Simulate a payment of $10
+        self.assertEqual(response['status'], 'success')
 
-        self.transaction_manager.process_payment('venmo', 100)
-        self.assertTrue(mock_post.called)
-        self.assertEqual(mock_post.call_count, 1)
+    def test_process_payment_invalid_amount(self):
+        """Test processing payment with an invalid amount (negative)."""
+        with self.assertRaises(ValueError):
+            self.transaction_manager.process_payment('paypal', -50)
 
-    @patch('modules.transaction.requests.post')
-    def test_process_payment_paypal(self, mock_post):
-        # Mock the response from the PayPal API
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {'status': 'success'}
-
-        self.transaction_manager.process_payment('paypal', 100)
-        self.assertTrue(mock_post.called)
-        self.assertEqual(mock_post.call_count, 1)
-
-    @patch('modules.transaction.requests.post')
-    def test_process_payment_cashapp(self, mock_post):
-        # Mock the response from the CashApp API
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {'status': 'success'}
-
-        self.transaction_manager.process_payment('cashapp', 100)
-        self.assertTrue(mock_post.called)
-        self.assertEqual(mock_post.call_count, 1)
+    def test_account_balance_after_transaction(self):
+        """Test account balance after a payment transaction."""
+        initial_balance = self.account_manager.get_account_balance('paypal')
+        self.transaction_manager.process_payment('paypal', 5)  # Simulate a payment of $5
+        self.assertEqual(self.account_manager.get_account_balance('paypal'), initial_balance + 5)
 
 if __name__ == "__main__":
     unittest.main()

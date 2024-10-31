@@ -1,0 +1,30 @@
+Metadata-Version: 2.1
+Name: pySdk
+Version: 0.4
+Summary: secuuth  SDK for python scripts
+Home-page: https://github.com/akum304/pySdk.git
+Author: secuuth
+Author-email: amitoshkumar10@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests
+Requires-Dist: python-jose
+Requires-Dist: cryptography
+
+
+#secuuth-python-sdk
+IT Takes token as input and it verify and decode the token
+
+##Installation
+
+```pip install pySdk```
+
+##Methods
+decodedAndVerifiedAccessToken=accessToken(token).decode()
+decodedAndVerifiedIdToken=accessToken(token).decode()
+

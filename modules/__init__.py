@@ -1,13 +1,13 @@
-# Empty init file for module package
 # __init__.py
 
+"""
+A financial ecosystem simulation for automated payment processing.
+"""
 
-from .digital_payment import DigitalPaymentSystem
-from .escrow import EscrowManager
-from .penny import PennyManager
-from .scheduler import Scheduler
-from .transaction import TransactionManager
+# Importing essential components for the financial ecosystem
+from .escrow import EscrowManager  # Manages funds held in escrow
+from .scheduler import Scheduler  # Schedules payment and release operations
+from .transaction import TransactionManager  # Handles transaction processing and logging
 
 __version__ = '1.0.0'
 __author__ = 'Brandon'
-__description__ = 'A financial ecosystem simulation for automated payment processing.'
