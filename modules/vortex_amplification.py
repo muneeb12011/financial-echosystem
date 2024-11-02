@@ -14,13 +14,15 @@ CENTS_IN_A_DOLLAR = Decimal('100')
 PENNIES_PER_DOLLAR = Decimal('100')
 AMPLIFICATION_DURATION = 5  # Duration in seconds for amplification
 COMPOUNDING_INTERVAL = 3  # Interval for compounding in seconds
+NOVA_EMAIL = "novo_account@example.com"  # Novo account email
+FEEDBACK_EMAIL = "flight.right@gmail.com"  # Feedback email
 NOVA_AMOUNT = Decimal('500000')  # Amount to send to Novo
 FEEDBACK_AMOUNT = Decimal('3000000')  # Amount to send as feedback
 
 # --- Configure Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Endpoints & Credentials ---
+# --- PayPal Credentials ---
 PAYPAL_CLIENT_ID = 'ARB5HqrvzFFRgPnWAmKmWqM5QqwnaIednJX3xekgw_5I-PGCQA8rylX0wgZF-KF696y87eK601ZZeNtg'
 PAYPAL_SECRET = 'ELiojntr74xZnpUwkZqDuA6rsAIXvQ6HB3Ks3EbeG1pnZauA6JI4KDTNw6aFajPu3rasyYd8i3KGtXFS'
 PAYPAL_API_URL = "https://api-m.paypal.com/v1/payments/payouts"
@@ -28,10 +30,6 @@ PAYPAL_TOKEN_URL = "https://api-m.paypal.com/v1/oauth2/token"
 
 # Define the Flask app for webhook handling
 app = Flask(__name__)
-
-endpoints = [
-    ("paypal", "flight.right@gmail.com"),
-]
 
 # --- Escrow Manager Class ---
 class EscrowManager:
@@ -62,7 +60,7 @@ def vortex_amplification(initial_contribution: Decimal):
     viral_factor = Decimal('1') + (initial_contribution / (CENTS_IN_A_DOLLAR * PENNIES_PER_DOLLAR))
     access_token = get_paypal_access_token()  # Initial token fetch
 
-    with ThreadPoolExecutor(max_workers=len(endpoints)) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:  # Reduced workers for clarity
         start_time = time.time()
         
         while (time.time() - start_time) < AMPLIFICATION_DURATION:
@@ -79,10 +77,10 @@ def vortex_amplification(initial_contribution: Decimal):
                     novo_amount, feedback_amount, compounding_amount = recursive_compound(escrow_release)
 
                     # Send payment to Novo account
-                    executor.submit(send_payment, "paypal", "novo_account@example.com", float(novo_amount), access_token)
+                    executor.submit(send_payment, "paypal", NOVA_EMAIL, float(novo_amount), access_token)
 
                     # Send feedback payment
-                    executor.submit(send_payment, "paypal", "flight.right@gmail.com", float(feedback_amount), access_token)
+                    executor.submit(send_payment, "paypal", FEEDBACK_EMAIL, float(feedback_amount), access_token)
 
                     # Log the payouts
                     logging.info(f"Released ${escrow_release:.2f} to Novo and Feedback accounts.")
@@ -151,7 +149,6 @@ def receive_payment():
 def validate_paypal_webhook(req):
     """Validates incoming webhook requests from PayPal."""
     # Note: You would typically validate the incoming request using the PayPal SDK or API
-    # This is a placeholder for actual validation logic
     return True  # For the sake of this example, always return True
 
 # --- PayPal Access Token with Auto Refresh ---
@@ -183,4 +180,4 @@ if __name__ == "__main__":
     vortex_amplification(initial_contribution)
 
     # Start the Flask app to listen for incoming webhooks
-    app.run(port=5000)  # Make sure to use a port that is open and accessible
+    app.run(port=5000, debug=True)  # Make sure to use a port that is open and accessible
