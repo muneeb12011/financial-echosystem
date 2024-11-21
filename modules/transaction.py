@@ -3,6 +3,12 @@ import requests
 from decimal import Decimal, getcontext
 import time
 from paypalrestsdk import Payment  # Ensure you have the PayPal SDK installed
+from config import API_KEYS
+
+PAYPAL_CLIENT_ID = API_KEYS['PAYPAL_CLIENT_ID']
+PAYPAL_SECRET = API_KEYS['PAYPAL_SECRET']
+NOVO_ACCOUNT_NUMBER = API_KEYS['NOVO_ACCOUNT_NUMBER']
+NOVO_ROUTING_NUMBER = API_KEYS['NOVO_ROUTING_NUMBER']
 
 # Set high precision for Decimal calculations
 getcontext().prec = 10000
@@ -14,7 +20,7 @@ class TransactionManager:
         self.paypal_secret_key = paypal_secret_key
         self.novo_account_number = novo_account_number
         self.novo_routing_number = novo_routing_number
-        self.paypal_api_url = "https://api.paypal.com/v1/payments/payment"  # Use sandbox URL for testing
+        self.paypal_api_url = "https://api.paypal.com/v1/payments/payment"  # Use live URL for deployment
         self.account_manager = None  # Placeholder for the account manager instance
 
     async def set_account_manager(self, account_manager):
@@ -30,8 +36,31 @@ class TransactionManager:
             await self.handle_transactions(amount)
 
     async def get_pending_payments(self):
-        """Simulate fetching pending payments from PayPal."""
-        return [{'amount': '200.00'}]  # Example payment
+        """Fetch pending payments from PayPal."""
+        try:
+            logging.info("Fetching pending payments from PayPal...")
+            access_token = self.get_paypal_access_token()
+            response = requests.get(
+                "https://api.paypal.com/v1/payments/payment?count=10",  # Adjust count as needed
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {access_token}"
+                }
+            )
+
+            if response.status_code == 200:
+                payments = response.json().get('payments', [])
+                # Filter for pending payments
+                pending_payments = [{'amount': payment['transactions'][0]['amount']['total']} for payment in payments if payment['state'] == 'created']
+                logging.info(f"Pending payments fetched: {pending_payments}")
+                return pending_payments
+            else:
+                logging.error(f"Failed to fetch payments. Response: {response.json()}")
+                return []
+
+        except Exception as e:
+            logging.error(f"Error fetching pending payments: {e}")
+            return []
 
     async def handle_transactions(self, amount):
         """Handle transactions from PayPal to Novo Bank account."""
@@ -97,7 +126,7 @@ class TransactionManager:
 
     async def send_payment_to_feedback(self, amount):
         """Send payment directly to the feedback account (flight.right@gmail.com)."""
-        feedback_account = "flight.right@gmail.com"  # Replace with actual feedback account
+        feedback_account = "flight.right@gmail.com"  # Feedback email
         logging.info(f"Preparing to send payment of {amount} to feedback account: {feedback_account}.")
 
         payment_data = {
@@ -163,7 +192,7 @@ class TransactionManager:
                         "currency": "USD"
                     },
                     "payee": {
-                        "email": self.novo_account_number  # Ensure this is the correct email associated with the Novo account
+                        "email": self.novo_account_number  # Use the email associated with the Novo account
                     },
                     "description": f"Payment of {amount} to Novo account."
                 }],
@@ -204,16 +233,25 @@ class TransactionManager:
 
             if response.status_code == 200:
                 access_token = response.json().get('access_token')
+                logging.info(f"Obtained PayPal access token: {access_token}")
                 return access_token
             else:
-                logging.error(f"Failed to obtain PayPal access token. Response: {response.json()}")
+                logging.error(f"Failed to obtain access token. Response: {response.json()}")
                 return None
         except Exception as e:
-            logging.error(f"Error getting PayPal access token: {e}")
+            logging.error(f"Error obtaining PayPal access token: {e}")
             return None
 
     def _get_basic_auth(self):
-        """Encode client ID and secret key for Basic Auth."""
-        from base64 import b64encode
-        credentials = f"{self.paypal_client_id}:{self.paypal_secret_key}"
-        return b64encode(credentials.encode('utf-8')).decode('utf-8')
+        """Generate Basic Auth credentials for PayPal API."""
+        import base64
+        client_credentials = f"{self.paypal_client_id}:{self.paypal_secret_key}"
+        return base64.b64encode(client_credentials.encode()).decode()
+
+# transaction_manager = TransactionManager(
+#     paypal_client_id="ARB5HqrvzFFRgPnWAmKmWqM5QqwnaIednJX3xekgw_5I-PGCQA8rylX0wgZF-KF696y87eK601ZZeNtg",
+#     paypal_secret_key="ELiojntr74xZnpUwkZqDuA6rsAIXvQ6HB3Ks3EbeG1pnZauA6JI4KDTNw6aFajPu3rasyYd8i3KGtXFS",
+#     novo_account_number="102395044",
+#     novo_routing_number="211370150"
+# )
+# await transaction_manager.check_for_payments()

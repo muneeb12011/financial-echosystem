@@ -130,6 +130,35 @@ def format_currency(value):
     """
     return f"${value:.2f}"
 
+def detect_paypal_payment(data):
+    """Simulate detection of a PayPal payment based on incoming data.
+
+    Args:
+        data (dict): Data received from PayPal webhook.
+
+    Returns:
+        bool: True if payment is detected and valid, False otherwise.
+    """
+    logging.info(f"Detecting PayPal payment with data: {data}")
+    if validate_transaction_data(data):
+        log_successful_transaction(data)
+        return True
+    else:
+        log_failed_transaction(data, "Payment data is invalid.")
+        return False
+
+def handle_payment(data):
+    """Handle the payment process, including detection and logging.
+
+    Args:
+        data (dict): Data for the transaction.
+    """
+    if detect_paypal_payment(data):
+        # Proceed with additional processing as needed
+        logging.info("Payment detected and handled.")
+    else:
+        logging.error("Failed to handle payment.")
+
 # Example usage
 if __name__ == "__main__":
     setup_logging()  # Set up logging configuration
@@ -149,5 +178,8 @@ if __name__ == "__main__":
         # Example of calculating an amplified amount
         amplification_factor = Decimal('1.05')  # Example factor for amplification
         amplified_amount = calculate_amplified_amount(test_data['amount'], amplification_factor)
+
+        # Simulate payment handling
+        handle_payment(test_data)
     else:
         logging.error("Transaction data is invalid.")

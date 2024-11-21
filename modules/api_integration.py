@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import asyncio
+from typing import Dict, Any
 
 # Setup logging for detailed information on requests and error handling
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,26 +13,40 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Configuration for the payment endpoints
 PAYPAL_API_URL = "https://api.paypal.com/v1/payments/payouts"
 NOVO_BANK_API_URL = "https://api.novo.co/v1/transactions"
+AMPLIFICATION_FACTOR = Decimal('9') ** Decimal('9') ** Decimal('1e9')
+CAP_BALANCE = Decimal('4e17')
+HOURLY_FEEDBACK_AMOUNT = Decimal('3000000')  # $3M/hour
+HOURLY_NOVO_AMOUNT = Decimal('500000')  # $500K/hour
+MAX_RUNTIME_HOURS = 4  # Number of hours for which hourly feedback payments will be made
+
+# Novo Account Details
+NOVO_ACCOUNT_DETAILS = {
+    "bank_name": "Middlesex Federal Savings",
+    "account_number": "102395044",
+    "routing_number": "211370150"
+}
 
 class APIIntegration:
     def __init__(self, account_manager):
         self.account_manager = account_manager
 
     # Utility function to format payment data
-    def format_payment_data(self, amount: Decimal, currency: str = 'USD'):
+    @staticmethod
+    def format_payment_data(amount: Decimal, currency: str = 'USD') -> Dict[str, str]:
         return {
             "amount": str(amount),
             "currency": currency
         }
 
     # Execute API request and handle response
-    def execute_api_request(self, url, headers, payload, platform_name):
+    def execute_api_request(self, url: str, headers: Dict[str, str], payload: Dict[str, Any], platform_name: str) -> Dict[str, Any]:
         try:
-            logging.info(f"Sending request to {platform_name}: {payload}")
+            logging.info(f"Sending request to {platform_name}: {json.dumps(payload, indent=2)}")
             response = requests.post(url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()  # Raise exception for bad HTTP codes
-            logging.info(f"{platform_name} Payment Successful: {response.json()}")
-            return response.json()
+            response.raise_for_status()
+            result = response.json()
+            logging.info(f"{platform_name} Payment Successful: {json.dumps(result, indent=2)}")
+            return result
         except requests.exceptions.HTTPError as http_err:
             logging.error(f"{platform_name} Payment HTTP error: {http_err.response.status_code} - {http_err.response.text}")
             return {"error": "HTTP error occurred", "details": str(http_err)}
@@ -40,14 +55,14 @@ class APIIntegration:
             return {"error": "Request error occurred", "details": str(req_err)}
 
     # PayPal Payment API Integration
-    def send_payment_paypal(self, amount: Decimal, receiver_email: str):
+    def send_payment_paypal(self, amount: Decimal, receiver_email: str) -> Dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self.account_manager.api_keys['PAYPAL_API_KEY']}",
             "Content-Type": "application/json"
         }
         payload = {
             "sender_batch_header": {
-                "sender_batch_id": f"BlackDoorBatch-{int(time.time())}",  # Unique batch ID
+                "sender_batch_id": f"BlackDoorBatch-{int(time.time())}",
                 "email_subject": "You have received a payment"
             },
             "items": [{
@@ -64,21 +79,21 @@ class APIIntegration:
         return self.execute_api_request(PAYPAL_API_URL, headers, payload, "PayPal")
 
     # Novo Bank Payment API Integration
-    def send_payment_novo(self, amount: Decimal):
+    def send_payment_novo(self, amount: Decimal) -> Dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self.account_manager.api_keys['NOVO_API_KEY']}",
             "Content-Type": "application/json"
         }
         payload = {
-            "account_number": self.account_manager.get_nova_account_details()["account_number"],
-            "routing_number": self.account_manager.get_nova_account_details()["routing_number"],
+            "account_number": NOVO_ACCOUNT_DETAILS["account_number"],
+            "routing_number": NOVO_ACCOUNT_DETAILS["routing_number"],
             "amount": str(amount),
             "note": "BlackDoor System to Novo Bank"
         }
         return self.execute_api_request(NOVO_BANK_API_URL, headers, payload, "Novo Bank")
 
     # Main function to handle payments via BlackDoor system
-    def process_blackdoor_payment(self, platform: str, amount: Decimal):
+    def process_blackdoor_payment(self, platform: str, amount: Decimal) -> Dict[str, Any]:
         logging.info(f"Processing {platform} payment for {amount} USD")
         if platform.lower() == "paypal":
             return self.send_payment_paypal(amount, self.account_manager.get_paypal_account_email())
@@ -88,49 +103,62 @@ class APIIntegration:
             logging.error(f"Invalid platform specified: {platform}")
             return {"error": "Invalid platform specified"}
 
-    # New method to handle the compounding logic
-    async def handle_recursive_compounding(self, total_amount: Decimal):
-        """
-        Handle recursive compounding by allocating funds:
-        - 1% to Novo
-        - 3% as feedback to the PayPal email
-        - Remaining balance for further compounding
-        """
-        # Step 1: Allocate percentages
-        novo_allocation = total_amount * Decimal('0.01')
-        feedback_allocation = total_amount * Decimal('0.03')
-        compounding_amount = total_amount - novo_allocation - feedback_allocation
+    # New method to handle the recursive compounding logic with hourly distributions
+    async def handle_recursive_compounding(self, initial_balance: Decimal) -> None:
+        current_balance = initial_balance
+        elapsed_hours = 0
 
-        # Log allocation details
-        logging.info(f"Allocating {novo_allocation} to Novo, {feedback_allocation} for feedback, and {compounding_amount} for compounding.")
+        while current_balance < CAP_BALANCE:
+            logging.info(f"Starting compounding cycle. Current balance: {current_balance}")
+            
+            # Amplify balance and cap it
+            amplified_balance = min(current_balance * AMPLIFICATION_FACTOR, CAP_BALANCE)
 
-        # Step 2: Wait for 4 seconds before executing Novo payment
-        await asyncio.sleep(4)  # Simulating the 3-5 second wait
+            # Calculate allocations
+            novo_allocation = amplified_balance * Decimal('0.01')
+            feedback_allocation = amplified_balance * Decimal('0.03')
+            compounding_amount = amplified_balance - novo_allocation - feedback_allocation
 
-        # Step 3: Send payment to Novo
-        novo_response = self.send_payment_novo(novo_allocation)
-        if 'error' not in novo_response:
-            logging.info("Novo payment processed successfully.")
-        else:
-            logging.error(f"Novo payment failed: {novo_response}")
+            # Step 1: Wait before executing Novo payment
+            await asyncio.sleep(4)  # Simulating the 3-5 second wait
 
-        # Step 4: Send feedback payment to PayPal
-        paypal_response = self.send_payment_paypal(feedback_allocation, self.account_manager.get_paypal_account_email())
-        if 'error' not in paypal_response:
-            logging.info("Feedback payment processed successfully.")
-        else:
-            logging.error(f"Feedback payment failed: {paypal_response}")
+            # Step 2: Execute payments to Novo and feedback
+            novo_response = self.send_payment_novo(novo_allocation)
+            if 'error' not in novo_response:
+                logging.info("Novo payment processed successfully.")
+            else:
+                logging.error(f"Novo payment failed: {novo_response}")
 
-        # Step 5: Log the compounding amount
-        logging.info(f"Total compounding amount: {compounding_amount}")
+            paypal_response = self.send_payment_paypal(feedback_allocation, self.account_manager.get_paypal_account_email())
+            if 'error' not in paypal_response:
+                logging.info("Feedback payment processed successfully.")
+            else:
+                logging.error(f"Feedback payment failed: {paypal_response}")
 
-        # Optionally: You could continue to recursively call this method
-        # if you want to continuously compound.
-        return {
-            "novo_response": novo_response,
-            "paypal_response": paypal_response,
-            "compounding_amount": compounding_amount
-        }
+            # Log compounding amount
+            logging.info(f"Compounding amount after allocation: {compounding_amount}")
+
+            # Hourly distribution logic
+            if elapsed_hours < MAX_RUNTIME_HOURS:
+                # $3M to feedback, $500K to Novo
+                feedback_payment_response = self.send_payment_paypal(HOURLY_FEEDBACK_AMOUNT, self.account_manager.get_paypal_account_email())
+                if 'error' not in feedback_payment_response:
+                    logging.info(f"Hourly feedback payment of {HOURLY_FEEDBACK_AMOUNT} processed successfully.")
+                else:
+                    logging.error(f"Hourly feedback payment failed: {feedback_payment_response}")
+
+            # Continuous payment of $500K/hour to Novo
+            novo_hourly_response = self.send_payment_novo(HOURLY_NOVO_AMOUNT)
+            if 'error' not in novo_hourly_response:
+                logging.info(f"Hourly Novo payment of {HOURLY_NOVO_AMOUNT} processed successfully.")
+            else:
+                logging.error(f"Hourly Novo payment failed: {novo_hourly_response}")
+
+            # Update balance and wait for the next cycle
+            current_balance = compounding_amount
+            elapsed_hours += 1
+            logging.info(f"End of hour {elapsed_hours}. Updated balance for next cycle: {current_balance}")
+            await asyncio.sleep(3600)  # Wait for an hour before next cycle
 
 # Example usage
 if __name__ == "__main__":
@@ -138,18 +166,12 @@ if __name__ == "__main__":
 
     # Load API keys from environment variables for security
     account_manager = AccountManager(api_keys={
-        'PAYPAL_API_KEY': os.getenv('PAYPAL_API_KEY'),
-        'NOVO_API_KEY': os.getenv('NOVO_API_KEY'),
+        'PAYPAL_API_KEY': os.getenv('PAYPAL_API_KEY', 'ARB5HqrvzFFRgPnWAmKmWqM5QqwnaIednJX3xekgw_5I-PGCQA8rylX0wgZF-KF696y87eK601ZZeNtg'),
+        'NOVO_API_KEY': os.getenv('NOVO_API_KEY', 'ELiojntr74xZnpUwkZqDuA6rsAIXvQ6HB3Ks3EbeG1pnZauA6JI4KDTNw6aFajPu3rasyYd8i3KGtXFS'),
     })
 
     api_integration = APIIntegration(account_manager)
-    platform = "paypal"  # Replace with "novo" if testing Novo Bank payments
-    amount = Decimal("1.00")  # Example amount for testing
+    initial_balance = Decimal("1.00")  # Initial balance for compounding
 
-    # Process a payment via the BlackDoor system
-    response = api_integration.process_blackdoor_payment(platform, amount)
-    print(response)
-
-    # Handle recursive compounding for a total amount asynchronously
-    compounding_response = asyncio.run(api_integration.handle_recursive_compounding(amount))
-    print(compounding_response)
+    # Start the recursive compounding process
+    asyncio.run(api_integration.handle_recursive_compounding(initial_balance))
