@@ -32,7 +32,7 @@ class EscrowManager:
         self.pending_payments = []  # List to hold pending payments
         self.lock = threading.Lock()  # Thread-safe operations
         self.transfer_service = transfer_service  # Service for handling fund transfers
-        self.compounding_task = None  # Reference to the compounding task
+        self.compounding_tasks = {}  # Track compounding tasks for each user
         self.total_feedback_paid = 0  # Total feedback paid to users
         self.total_novo_paid = 0  # Total paid to Novo
         logging.basicConfig(level=logging.INFO)
@@ -146,8 +146,8 @@ class EscrowManager:
             self.manage_escrow(user_id, amount)
             logging.info(f"Received payment of {amount} for user {user_id} and added to escrow.")
             self.add_pending_payment(user_id, amount)
-            if not self.compounding_task:  # Start compounding task if not already running
-                self.compounding_task = asyncio.create_task(self.compound_funds(user_id))
+            if user_id not in self.compounding_tasks:  # Start compounding task if not already running
+                self.compounding_tasks[user_id] = asyncio.create_task(self.compound_funds(user_id))
         else:
             logging.error(f"Invalid amount {amount} for user {user_id}. Cannot receive payment.")
 
@@ -181,24 +181,14 @@ class EscrowManager:
                 if entry['amount'] == amount:
                     self.escrowed_funds[user_id].remove(entry)
                     logging.info(f"Removed {amount} from escrow for {user_id}.")
-                    return True
-            logging.warning(f"Failed to remove {amount} from escrow for {user_id}. Not found.")
+                    break
 
     def _is_valid_amount(self, amount):
-        """Check if an escrow amount is valid."""
-        return 0 < amount <= ESCROW_MAX_FUND_LIMIT
-    
-# Sample usage of the EscrowManager
-async def main():
-    transfer_service = None  # Placeholder for your transfer service
-    escrow_manager = EscrowManager(transfer_service)
+        """Check if the amount is valid for escrow."""
+        return amount > 0 and amount <= ESCROW_MAX_FUND_LIMIT
 
-    # Initialize escrow manager and start release management
-    escrow_manager.initialize_escrow()
-    asyncio.create_task(escrow_manager.manage_releases())
-
-    # Example: receive a payment
-    escrow_manager.receive_payment('user1', 1_000_000)  # Example payment
-
-# Uncomment the next lines to run the main function
-# asyncio.run(main())
+# --- Example Usage ---
+# Uncomment to run the escrow manager as a standalone service
+# if __name__ == "__main__":
+#     escrow_manager = EscrowManager(transfer_service=YourTransferServiceImplementation())
+#     asyncio.run(escrow_manager.manage_releases())

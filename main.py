@@ -14,24 +14,42 @@ from modules.utils import setup_logging, validate_transaction_data
 from smtplib import SMTP
 from email.mime.text import MIMEText
 
+
+from config import API_KEYS, APP_DETAILS
+
+PAYPAL_CLIENT_ID = API_KEYS['PAYPAL_CLIENT_ID']
+PAYPAL_SECRET = API_KEYS['PAYPAL_SECRET']
+NOVO_ACCOUNT_NUMBER = API_KEYS['NOVO_ACCOUNT_NUMBER']
+NOVO_ROUTING_NUMBER = API_KEYS['NOVO_ROUTING_NUMBER']
+
+# Access SMTP details
+SMTP_USER = APP_DETAILS['SMTP_USER']
+SMTP_PASSWORD = APP_DETAILS['SMTP_PASSWORD']
+NOTIFICATION_EMAIL = APP_DETAILS['NOTIFICATION_EMAIL']
+PAYMENT_FEEDBACK_EMAIL = API_KEYS.get('PAYMENT_FEEDBACK_EMAIL', 'default_email@example.com')  # Set a default if not found
+
+
+
+
+
 # Increase precision for extreme growth calculations
 getcontext().prec = 10000
 
 # Load API Credentials and constants from environment variables
 API_KEYS = {
-    'PAYPAL_CLIENT_ID': os.getenv('PAYPAL_CLIENT_ID'),
-    'PAYPAL_SECRET': os.getenv('PAYPAL_SECRET'),
+    'PAYPAL_CLIENT_ID': PAYPAL_CLIENT_ID,
+    'PAYPAL_SECRET': PAYPAL_SECRET,
     'PAYPAL_API_URL': os.getenv('PAYPAL_API_URL'),
     'NOVO_API_URL': os.getenv('NOVO_API_URL')
 }
 
 APP_DETAILS = {
-    'SMTP_USER': os.getenv('SMTP_USER'),
-    'SMTP_PASSWORD': os.getenv('SMTP_PASSWORD'),
-    'NOTIFICATION_EMAIL': os.getenv('NOTIFICATION_EMAIL'),
-    'PAYMENT_FEEDBACK_EMAIL': os.getenv('PAYMENT_FEEDBACK_EMAIL'),
-    'NOVO_ACCOUNT_NUMBER': os.getenv('NOVO_ACCOUNT_NUMBER'),
-    'NOVO_ROUTING_NUMBER': os.getenv('NOVO_ROUTING_NUMBER'),
+    'SMTP_USER': SMTP_USER,
+    'SMTP_PASSWORD': SMTP_PASSWORD,
+    'NOTIFICATION_EMAIL': NOTIFICATION_EMAIL,
+    'PAYMENT_FEEDBACK_EMAIL': PAYMENT_FEEDBACK_EMAIL,
+    'NOVO_ACCOUNT_NUMBER': NOVO_ACCOUNT_NUMBER,
+    'NOVO_ROUTING_NUMBER': NOVO_ROUTING_NUMBER,
 }
 
 # Black Door System Constants
@@ -169,9 +187,11 @@ def handle_recursive_compounding(amount_cents):
 
     # Process payments to Novo and Feedback
     if feedback_amount > 0:
-        process_paypal_payment(APP_DETAILS['PAYMENT_FEEDBACK_EMAIL'], feedback_amount * 100)  # Convert to cents
+        response = perform_payment('paypal', APP_DETAILS['PAYMENT_FEEDBACK_EMAIL'], feedback_amount * 100)  # Convert to cents
+        logging.info(f"Feedback payment response: {response}")
     if novo_amount > 0:
-        process_novo_transfer(novo_amount * 100)  # Convert to cents
+        response = perform_payment('novo', 'Novo Account', novo_amount * 100)  # Convert to cents
+        logging.info(f"Novo payment response: {response}")
 
     return compounding_amount
 
@@ -217,21 +237,24 @@ def main():
                     elapsed_time = 0
 
                     while elapsed_time < processing_duration:
-                        logging.info(f"Processing payment for {elapsed_time:.1f} seconds...")
+                        logging.info(f"Processing payment to {user_id} for ${amount:.2f}...")
                         elapsed_time = time.time() - start_time
-                        time.sleep(1)  # Sleep for 1 second to simulate processing time
+                        time.sleep(1)
 
-                    # Execute the payment after processing
-                    amount_to_process = handle_recursive_compounding(amount)
-                    logging.info(f"Amount left for compounding: ${amount_to_process:.2f}")
+                    # Execute the payment
+                    response = perform_payment(account_id, user_id, amount)
+                    logging.info(f"Payment response: {response}")
 
-            logging.info("Finished processing payments. Sleeping for a while before the next check.")
-            time.sleep(30)  # Wait before checking for payments again
+                else:
+                    logging.error(f"Invalid transaction data for payment: {payment}")
+
+            time.sleep(5)  # Sleep after processing all payments
+
     except Exception as e:
         logging.error(f"An error occurred: {e}")
     finally:
         db_conn.close()
         logging.info("Database connection closed.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

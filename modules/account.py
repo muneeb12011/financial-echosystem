@@ -28,7 +28,7 @@ class AccountManager:
         logging.info("Initializing accounts.")
         self.accounts = {
             'paypal': Decimal('0.0'),
-            'nova': Decimal('0.0')  # Novo account only
+            'nova': Decimal('0.0')  # Novo account
         }
         self.transaction_history = {key: [] for key in self.accounts.keys()}
         logging.info(f"Accounts initialized: {self.accounts}")
@@ -139,6 +139,24 @@ class AccountManager:
             logging.error(f"Failed to send payment: {response.text}")
             # If payment fails, rollback the balance update
             await self.update_balance('paypal', amount)
+
+    async def handle_payment_notifications(self, notification: Dict[str, Any]) -> None:
+        """
+        Handles payment notifications from payment platforms.
+
+        :param notification: A dictionary containing notification details.
+        """
+        payment_id = notification.get("payment_id")
+        status = notification.get("status")
+        amount = Decimal(notification.get("amount"))
+
+        if status == "completed":
+            await self.update_balance('paypal', amount)
+            logging.info(f"Payment {payment_id} completed. Amount: {amount} added to PayPal account.")
+        elif status == "failed":
+            logging.warning(f"Payment {payment_id} failed. No changes made to accounts.")
+        else:
+            logging.error(f"Unknown payment status for payment {payment_id}: {status}")
 
 # Example of how to run an asynchronous method
 async def main():

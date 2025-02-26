@@ -76,7 +76,7 @@ class Scheduler:
 
 # Example usage
 async def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # Instantiate the transaction manager with relevant details
     transaction_manager = TransactionManager(
