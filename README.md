@@ -39,13 +39,6 @@ pip install requests
 Configuration
 Before running the application, update the following constants in vortex_amplification.py with your PayPal client ID and secret:
 
-
-PAYPAL_CLIENT_ID = 'ARB5HqrvzFFRgPnWAmKmWqM5QqwnaIednJX3xekgw_5I-PGCQA8rylX0wgZF-KF696y87eK601ZZeNtg'
-PAYPAL_SECRET = 'ELiojntr74xZnpUwkZqDuA6rsAIXvQ6HB3Ks3EbeG1pnZauA6JI4KDTNw6aFajPu3rasyYd8i3KGtXFS'
-Usage
-To run the application, execute the following command:
-
-
 python main.py
 You can adjust the initial_contribution variable in vortex_amplification.py to set your desired starting amount for amplification.
 
